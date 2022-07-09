@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fiews-deployment
+  namespace: kovan
+  labels:
+    app: fiews-failover
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fiews-failover
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: fiews-failover
+    spec:
+      containers:
+        - name: failover
+          image: fiews/cl-eth-failover
+          args: ["<node 1>","<node 2>"]
+          ports:
+          - containerPort: 4000
+      tolerations:
+      - key: "name"
+        operator: "Equal"
+        value: "fiews-deployment"
+        effect: "NoSchedule"
+      - key: "app"
+        operator: "Equal"
+        value: "kovan-node"
+        effect: "NoSchedule"

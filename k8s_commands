@@ -1,0 +1,90 @@
+#set namespace context
+kubectl config get-contexts
+kubectl create namespace kovan
+kubectl config set-context --current --namespace=kovan
+kubectl config set-context --current --namespace=splunk
+kubectl config use-context CONTEXT_NAME
+
+#apply
+kubectl apply -f kovan-deploy.yaml
+
+#deploy configmap
+kubectl create configmap kovan-env --from-file=.env
+
+#expose chainlink service
+kubectl expose deployment/chainlink-deployment
+
+#delete 
+kubectl delete configmap kovan-env
+kubectl delete -f kovan-deploy.yaml
+
+#kubectl get
+kubectl get pods
+kubectl get all
+kubectl get configmaps
+kubectl get secrets
+
+#Enter pod bash shell
+kubectl exec -it <pod> bash
+
+#kubectl update image
+kubectl set image deployment.apps/kovan-deployment chainlink=smartcontract/chainlink:0.10.7
+
+#taints
+kubectl taint nodes ip-192-168-97-56.ec2.internal app=kovan-node:NoSchedule - no scheduling of pods on this node unless they have tolerations
+kubectl taint nodes ip-192-168-97-56.ec2.internal app=fiews-deployment:NoSchedule - no scheduling of pods on this node unless they have tolerations
+kubectl taint nodes ip-192-168-86-243.ec2.internal app=kovan-node:NoSchedule- - deletes taint
+
+# splunk secrets 
+kubectl get secret splunk-splunk-secret -o yaml
+echo '' | base64 --decode
+
+#log events
+kubectl get events --sort-by=.metadata.creationTimestamp
+
+#kubectl port forward
+kubectl port-forward <pod> 6688:6688
+kubectl port-forward service/chainlink-service 6688:6688
+
+#helm
+helm delete my-eks-splunk-connect
+helm install my-eks-splunk-connect -f values.yaml splunk/splunk-connect-for-kubernetes
+
+#eksctl cluster
+eksctl create cluster -f eksconfig.yaml
+eksctl delete cluster -f eksconfig.yaml
+eksctl delete cluster --region=us-east-1 --name=aws-eks
+
+#eksctl create nodegroup
+eksctl create nodegroup --config-file=eksconfig.yaml 
+
+# Full Deployment Steps
+Harden Access VM
+Launch cluster with eksconfig.yaml
+    eksctl create cluster -f eksconfig.yaml
+Create Namespaces
+    kubectl create namespace kovan
+    kubectl create namespace rinkeby
+    kubectl config set-context --current --namespace=kovan
+    kubectl config set-context --current --namespace=rinkeby
+Generate password, api, and openssl certs
+Create secrets for .api, .password, server.crt, and server.key
+    kubectl create secret generic api-env --from-file=.api
+    kubectl create secret generic password-env --from-file=.password
+    kubectl create secret generic crt-env --from-file=server.crt
+    kubectl create secret generic key-env --from-file=server.key
+#   kubectl apply -f kovan-ethurl-secret.yaml
+    kubectl apply -f kovan-db-secret.yaml
+Create services
+    kubectl apply -f fiews_service.yml 
+Launch deployments
+    kubectl apply -f fiews_deployment.yml 
+    kubectl apply -f kovan-deploy.yaml
+Launch SCK in default namespace
+Launch nodes in respective namespaces
+
+
+
+
+
+

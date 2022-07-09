@@ -1,0 +1,154 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kovan-deployment
+  labels:
+    app: kovan-node
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: kovan-node
+  template:
+    metadata:
+      labels:
+        app: kovan-node
+    spec:
+      nodeSelector:
+        node-class: "kovan"
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - kovan-node
+            topologyKey: "kubernetes.io/hostname"
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: chainlink
+          image: smartcontract/chainlink:0.10.12
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            runAsUser: 1000
+            runAsGroup: 1000
+          env:
+            - name: ROOT
+              value: "/chainlink"
+            - name: DB_URL_HOSTNAME
+              valueFrom:
+                secretKeyRef:
+                  name: kovan-database-credentials
+                  key: hostname
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kovan-database-credentials
+                  key: password
+            - name: DATABASE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: kovan-database-credentials
+                  key: username
+            - name: DB_URL_PORT                   
+              valueFrom:
+                secretKeyRef:
+                  name: kovan-database-credentials
+                  key: port
+            - name: DB_URL_DBNAME                
+              valueFrom:
+                secretKeyRef:
+                  name: kovan-database-credentials
+                  key: database
+            - name: DATABASE_URL
+              value: "postgres://$(DATABASE_USERNAME):$(DATABASE_PASSWORD)@$(DB_URL_HOSTNAME):$(DB_URL_PORT)/$(DB_URL_DBNAME)"
+            - name: ETH_CHAIN_ID
+              value: "42"
+            - name: ETH_URL
+              value: "ws://fiews-service.kovan.svc.cluster.local:4000"
+            - name: LINK_CONTRACT_ADDRESS
+              value: "contract_address"
+            - name: LOG_LEVEL
+              value: "debug"
+            - name: MIN_OUTGOING_CONFIRMATIONS
+              value: "2"
+            - name: MINIMUM_CONTRACT_PAYMENT
+              value: "1000000000000000"           
+            - name: TLS_CERT_PATH
+              value: /chainlink/.tls/server.crt
+            - name: TLS_KEY_PATH
+              value: /chainlink/.tls/server.key
+            - name: ALLOW_ORIGINS
+              value: "*"
+            - name: CHAINLINK_TLS_PORT
+              value: "6689"
+            - name: CHAINLINK_TLS_REDIRECT
+              value: "true"
+            - name: CHAINLINK_PORT
+              value: "6689"
+            - name: CLIENT_NODE_URL
+              value: "https://localhost:6689"
+          args: ["local", "n", "-p", "/chainlink/.password", "-a", "/chainlink/.api"]
+          ports:
+          - containerPort: 6689
+          volumeMounts:
+            - name: chainlink
+              mountPath: /chainlink
+            - name: api-volume
+              mountPath: /chainlink/.api
+              subPath: .api
+            - name: password-volume
+              mountPath: /chainlink/.password
+              subPath: .password
+            - name: crt-volume
+              mountPath: /chainlink/.tls/server.crt
+              subPath: server.crt
+            - name: key-volume
+              mountPath: /chainlink/.tls/server.key
+              subPath: server.key
+      tolerations:
+      - key: "app"
+        operator: "Equal"
+        value: "kovan-node"
+        effect: "NoSchedule"
+      - key: "name"
+        operator: "Equal"
+        value: "fiews-deployment"
+        effect: "NoSchedule"
+      initContainers:
+      - name: chainlink-init
+        image: busybox:latest
+        imagePullPolicy: IfNotPresent
+        command: 
+        - /bin/sh
+        - -c
+        - mkdir -p /chainlink && chown -R 1000:1000 /chainlink
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: chainlink
+          mountPath: /chainlink
+      volumes:
+        - name: chainlink
+          emptyDir: {}
+        - name: api-volume
+          secret:
+            secretName: api-env
+        - name: password-volume
+          secret:
+            secretName: password-env
+        - name: crt-volume
+          secret:
+            secretName: crt-env
+        - name: key-volume
+          secret:
+            secretName: key-env         
+      restartPolicy: Always
+
